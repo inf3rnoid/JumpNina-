@@ -71,7 +71,7 @@ Cấu trúc:
         character_jump.png
 """
 
-from __future__ import annotations
+
 
 import ctypes
 import sys
