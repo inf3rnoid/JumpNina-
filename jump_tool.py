@@ -1,32 +1,3 @@
-# ===== Auto install required packages =====
-import os
-import sys
-import subprocess
-import importlib
-
-_REQUIRED_PACKAGES = {
-    "cv2": "opencv-python",
-    "numpy": "numpy",
-    "mss": "mss",
-    "PIL": "Pillow",
-    "pynput": "pynput",
-}
-
-_installed = False
-for _module, _package in _REQUIRED_PACKAGES.items():
-    try:
-        importlib.import_module(_module)
-    except ImportError:
-        print(f"[INFO] Installing {_package}...")
-        subprocess.check_call([sys.executable, "-m", "pip", "install", _package])
-        _installed = True
-
-if _installed:
-    print("[INFO] Restarting application...")
-    os.execv(sys.executable, [sys.executable] + sys.argv)
-
-# ==========================================
-
 """
 CHARACTER + PLATFORM DETECTOR CHECK (Windows)
 
@@ -71,6 +42,194 @@ Cấu trúc:
         character_jump.png
 """
 
+from __future__ import annotations
+
+# ============================================================
+# AUTO DEPENDENCY INSTALLER
+# ============================================================
+# Đoạn này tự quét các câu lệnh import trong chính file hiện tại,
+# bỏ qua thư viện chuẩn của Python, rồi tự cài package còn thiếu.
+#
+# Một số module có tên import khác tên package trên PyPI:
+#   cv2    -> opencv-python
+#   PyQt5  -> PyQt5
+# ============================================================
+
+import ast as _bootstrap_ast
+import importlib.util as _bootstrap_importlib_util
+import os as _bootstrap_os
+import subprocess as _bootstrap_subprocess
+import sys as _bootstrap_sys
+from pathlib import Path as _BootstrapPath
+
+
+_BOOTSTRAP_PACKAGE_NAME_MAP = {
+    "cv2": "opencv-python",
+    "mss": "mss",
+    "numpy": "numpy",
+    "PyQt5": "PyQt5",
+    "pynput": "pynput",
+    "PIL": "Pillow",
+    "win32api": "pywin32",
+    "win32con": "pywin32",
+    "win32gui": "pywin32",
+    "win32ui": "pywin32",
+}
+
+
+def _bootstrap_get_imported_top_level_modules() -> set[str]:
+    """Đọc chính file hiện tại và lấy tên module cấp cao nhất."""
+    current_file = _BootstrapPath(__file__).resolve()
+
+    try:
+        source_code = current_file.read_text(encoding="utf-8")
+        tree = _bootstrap_ast.parse(source_code, filename=str(current_file))
+    except (OSError, SyntaxError) as error:
+        print(f"[DEPENDENCY ERROR] Không thể quét import: {error}")
+        return set(_BOOTSTRAP_PACKAGE_NAME_MAP)
+
+    modules: set[str] = set()
+
+    for node in _bootstrap_ast.walk(tree):
+        if isinstance(node, _bootstrap_ast.Import):
+            for alias in node.names:
+                modules.add(alias.name.split(".", 1)[0])
+
+        elif isinstance(node, _bootstrap_ast.ImportFrom):
+            if node.level == 0 and node.module:
+                modules.add(node.module.split(".", 1)[0])
+
+    return modules
+
+
+def _bootstrap_is_standard_library(module_name: str) -> bool:
+    """Kiểm tra module có thuộc thư viện chuẩn Python hay không."""
+    if module_name == "__future__":
+        return True
+
+    stdlib_names = getattr(_bootstrap_sys, "stdlib_module_names", set())
+
+    if module_name in stdlib_names:
+        return True
+
+    # Các module built-in không phải lúc nào cũng có trong stdlib_module_names.
+    if module_name in _bootstrap_sys.builtin_module_names:
+        return True
+
+    return False
+
+
+def _bootstrap_ensure_pip() -> None:
+    """Đảm bảo pip tồn tại trước khi cài dependency."""
+    try:
+        _bootstrap_subprocess.check_call(
+            [
+                _bootstrap_sys.executable,
+                "-m",
+                "pip",
+                "--version",
+            ],
+            stdout=_bootstrap_subprocess.DEVNULL,
+            stderr=_bootstrap_subprocess.DEVNULL,
+        )
+    except (OSError, _bootstrap_subprocess.CalledProcessError):
+        print("[DEPENDENCY] Không tìm thấy pip, đang khởi tạo pip...")
+
+        _bootstrap_subprocess.check_call(
+            [
+                _bootstrap_sys.executable,
+                "-m",
+                "ensurepip",
+                "--upgrade",
+            ]
+        )
+
+
+def _bootstrap_install_missing_dependencies() -> None:
+    imported_modules = _bootstrap_get_imported_top_level_modules()
+    current_folder = _BootstrapPath(__file__).resolve().parent
+
+    missing_packages: list[str] = []
+
+    for module_name in sorted(imported_modules):
+        if _bootstrap_is_standard_library(module_name):
+            continue
+
+        # Không cố cài các file/module Python cục bộ nằm cạnh app.
+        if (
+            (current_folder / f"{module_name}.py").exists()
+            or (current_folder / module_name / "__init__.py").exists()
+        ):
+            continue
+
+        try:
+            module_exists = (
+                _bootstrap_importlib_util.find_spec(module_name) is not None
+            )
+        except (ImportError, AttributeError, ValueError):
+            module_exists = False
+
+        if module_exists:
+            continue
+
+        package_name = _BOOTSTRAP_PACKAGE_NAME_MAP.get(
+            module_name,
+            module_name,
+        )
+
+        if package_name not in missing_packages:
+            missing_packages.append(package_name)
+
+    if not missing_packages:
+        return
+
+    print("=" * 72)
+    print("[DEPENDENCY] Phát hiện thư viện còn thiếu:")
+    for package_name in missing_packages:
+        print(f"  - {package_name}")
+    print("=" * 72)
+
+    _bootstrap_ensure_pip()
+
+    install_command = [
+        _bootstrap_sys.executable,
+        "-m",
+        "pip",
+        "install",
+        "--disable-pip-version-check",
+        *missing_packages,
+    ]
+
+    try:
+        _bootstrap_subprocess.check_call(install_command)
+    except _bootstrap_subprocess.CalledProcessError as error:
+        print(
+            "\n[DEPENDENCY ERROR] Không thể tự động cài thư viện.\n"
+            f"Lệnh thất bại với mã lỗi: {error.returncode}\n"
+            "Hãy kiểm tra kết nối Internet hoặc quyền cài package."
+        )
+        input("\nNhấn Enter để đóng...")
+        raise SystemExit(error.returncode) from error
+
+    print("[DEPENDENCY] Cài đặt hoàn tất. Đang khởi động lại app...")
+
+    _bootstrap_os.execv(
+        _bootstrap_sys.executable,
+        [_bootstrap_sys.executable, *(_bootstrap_sys.argv)],
+    )
+
+
+_bootstrap_install_missing_dependencies()
+
+# Xóa các tên bootstrap không cần dùng để tránh làm rối namespace chính.
+del _bootstrap_install_missing_dependencies
+del _bootstrap_get_imported_top_level_modules
+del _bootstrap_is_standard_library
+del _bootstrap_ensure_pip
+
+# ============================================================
+# END AUTO DEPENDENCY INSTALLER
+# ============================================================
 
 
 import ctypes
