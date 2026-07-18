@@ -1,3 +1,32 @@
+# ===== Auto install required packages =====
+import os
+import sys
+import subprocess
+import importlib
+
+_REQUIRED_PACKAGES = {
+    "cv2": "opencv-python",
+    "numpy": "numpy",
+    "mss": "mss",
+    "PIL": "Pillow",
+    "pynput": "pynput",
+}
+
+_installed = False
+for _module, _package in _REQUIRED_PACKAGES.items():
+    try:
+        importlib.import_module(_module)
+    except ImportError:
+        print(f"[INFO] Installing {_package}...")
+        subprocess.check_call([sys.executable, "-m", "pip", "install", _package])
+        _installed = True
+
+if _installed:
+    print("[INFO] Restarting application...")
+    os.execv(sys.executable, [sys.executable] + sys.argv)
+
+# ==========================================
+
 """
 CHARACTER + PLATFORM DETECTOR CHECK (Windows)
 
